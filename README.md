@@ -1,5 +1,7 @@
 # MCP Offensive Security Review
 
+[![skills.sh](https://skills.sh/b/harekrishnarai/mcp-security-review)](https://skills.sh/harekrishnarai/mcp-security-review)
+
 An agent skill for **offensive security triage and org-wide approval of MCP
 servers and connectors** before employees are allowed to use them in Claude
 Desktop, Claude Code, OpenCode, Codex CLI, or any MCP-compatible client.
