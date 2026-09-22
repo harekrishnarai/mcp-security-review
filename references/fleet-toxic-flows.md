@@ -14,7 +14,9 @@ using the primitives from `attack-catalog.md` §13:
 
 `reads_secrets` · `reads_pii` · `reads_code_repo` · `reads_email` ·
 `reads_browser` · `browses_web` · `network_egress` · `sends_external` ·
-`executes_code` · `writes_prod` · `moves_money` · `auth_admin`
+`executes_code` · `writes_prod` · `moves_money` · `auth_admin` ·
+`elicits_user` (MRTR/elicitation) · `samples_model` (drives the client LLM) ·
+`renders_ui` (MCP Apps HTML in the host)
 
 A capability is only real if the tool can be invoked by an ordinary employee
 under the current auth model. "Theoretically possible" on a server nobody can

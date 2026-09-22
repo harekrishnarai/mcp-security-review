@@ -3,6 +3,7 @@
 - **Artifact:** <name> @ <version>
 - **Pinned digest:** sha256:<...> (tarball / image / endpoint fingerprint)
 - **Transport:** stdio / SSE / Streamable HTTP | **Spec revision:** <YYYY-MM-DD>
+- **Spec era:** modern (2026-07-28+) / legacy (≤ 2025-11-25)
 - **Input mode reviewed:** white-box / black-box / both
 - **Requested by:** <team/person> | **Date:** <YYYY-MM-DD>
 - **Target clients:** Claude Desktop / Claude Code / OpenCode / Codex
@@ -65,6 +66,8 @@ If any condition cannot be enforced, the verdict must be REJECT instead.
 | Tampered / malicious artifact | yes/no |
 | Live instruction injection (proven) | yes/no |
 | Project-config auto-spawn unsigned | yes/no |
+| Unverified `requestState` affecting authz | yes/no |
+| Sensitive values in `x-mcp-header` | yes/no |
 
 ## Lifecycle
 

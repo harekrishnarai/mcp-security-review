@@ -9,11 +9,16 @@ description: >
   open-source MCP server OR a live endpoint URL. Covers white-box source
   testing, black-box live-server probing, tool-poisoning and prompt-injection
   testing, supply-chain tamper analysis, out-of-band exfiltration proof,
-  fleet-level toxic-flow analysis, and an enforced approval verdict. Keywords:
+  fleet-level toxic-flow analysis, and an enforced approval verdict. Anchored to
+  the current MCP spec revision (2026-07-28): stateless per-request `_meta`, no
+  sessions, `server/discover`, header–body validation (`x-mcp-header`), MRTR
+  `requestState`, `subscriptions/listen` drift, and legacy-era handling.
+  Keywords:
   MCP, model context protocol, connector approval, tool approval, red team,
   offensive security, tool poisoning, prompt injection, rug pull, confused
   deputy, token passthrough, session hijacking, DNS rebinding, supply chain,
-  exfiltration, blast radius, Claude Desktop, Claude Code, opencode, codex.
+  exfiltration, blast radius, x-mcp-header, MRTR, requestState, tool
+  annotations, MCP Apps, Claude Desktop, Claude Code, opencode, codex.
 ---
 
 # MCP Offensive Security Review & Org-Wide Approval
@@ -54,6 +59,19 @@ intends to ship (`claude_desktop_config.json`, `.mcp.json`,
 `~/.codex/config.toml`, `opencode.json`). Config is where auto-spawn and
 inline-secret attacks live — see `references/playbook-code.md` §Config.
 
+## Pin the spec era before anything else
+
+The MCP spec changed fundamentally at **2026-07-28**: the protocol is now
+**stateless** — no `initialize` handshake, no `Mcp-Session-Id`, no GET stream.
+Every request carries `_meta` version/capabilities, discovery is
+`server/discover`, and cross-call state is explicit handles. Earlier revisions
+(≤ `2025-11-25`) are the **legacy era** with a different attack surface
+(sessions, GET SSE stream, `resources/subscribe`).
+
+Determine the era first, then use the matching wire format. Applying modern
+assumptions to a legacy target (or vice versa) silently produces false
+negatives. Read `references/spec-2026-07-28.md` before hunting.
+
 ## Stance
 
 - **Assume the server is hostile until you fail to prove it.** The default is
@@ -73,12 +91,14 @@ inline-secret attacks live — see `references/playbook-code.md` §Config.
 ## Workflow
 
 1. **Recon & scope** — identify mode, pin the exact artifact (commit sha /
-   tarball digest / container digest / endpoint host+version). Record the MCP
-   spec revision the server implements. Unpinned artifact = finding.
+   tarball digest / container digest / endpoint host+version), and **determine
+   the spec era** (modern `2026-07-28`+ vs legacy ≤ `2025-11-25`). Unpinned
+   artifact = finding.
 2. **Attack surface extraction** — enumerate every tool, resource, prompt,
-   annotation, and capability the server exposes. Capture the raw
-   `tools/list` / `resources/list` / `prompts/list` output *verbatim* and hash
-   it. That hash is the drift baseline.
+   annotation, `x-mcp-header`, icon, schema, and declared capability. On modern
+   servers use `server/discover`; **paginate `tools/list` to exhaustion**. Capture
+   output *verbatim* and hash it — that hash is the drift baseline (and note the
+   hash alone won't catch mid-session `subscriptions/listen` mutation).
 3. **Execute the mode playbook** — `playbook-code.md` and/or
    `playbook-endpoint.md`. Hunt for the techniques in
    `references/attack-catalog.md`. You are looking for arbitrary execution,
@@ -126,6 +146,10 @@ from a second offensive engineer regardless of tier.
    tool output that can steer the agent (proven with a canary, not guessed).
 7. Project-scope config that auto-spawns an unsigned/unpinned server on folder
    trust.
+8. Verifiable `requestState` (MRTR) that influences authorization but is not
+   integrity-protected — attacker-controlled state trusted as policy.
+9. Sensitive parameter values mirrored into `x-mcp-header` HTTP headers, where
+   every intermediary can read them.
 
 Each requires a PoC or unambiguous artifact evidence — see
 `references/attack-catalog.md`.
@@ -134,6 +158,7 @@ Each requires a PoC or unambiguous artifact evidence — see
 
 | File | When to read |
 |---|---|
+| `references/spec-2026-07-28.md` | **First.** Protocol facts, eras, wire formats, security requirements |
 | `references/playbook-code.md` | White-box: source/package/container review, supply chain, config |
 | `references/playbook-endpoint.md` | Black-box: live endpoint probing |
 | `references/attack-catalog.md` | MCP-specific techniques, payloads, MCP01–MCP10 tags |

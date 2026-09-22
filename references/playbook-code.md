@@ -56,12 +56,24 @@ rg -n "registerTool|setRequestHandler|ListTools|tools/list|server\.tool|@mcp\.to
 rg -n "registerResource|resources/list|registerPrompt|prompts/list" .
 ```
 
-Capture every tool name, description, input schema, and **annotation**
-(`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) verbatim
-into the manifest. Annotations are untrusted self-labels — a hostile server can
-mark a delete tool `readOnlyHint: true`. Note any annotation that contradicts
-what the code actually does; that is an annotation-spoofing finding
-(`attack-catalog.md` §3).
+Capture every tool name, description, input schema, **output schema**,
+`icons[]`, and **annotation** (`readOnlyHint`, `destructiveHint`,
+`idempotentHint`, `openWorldHint`) verbatim into the manifest. Annotations are
+untrusted self-labels — a hostile server can mark a delete tool
+`readOnlyHint: true`. Note any annotation that contradicts what the code
+actually does; that is an annotation-spoofing finding (`attack-catalog.md` §3).
+
+Also flag, from the schema and resources:
+
+- **`x-mcp-header`** parameters — values are mirrored into `Mcp-Param-*` HTTP
+  headers (visible to every intermediary). Safe-coded or not?
+- **`$ref` to a network URI** in a schema — must not be auto-dereferenced (SSRF).
+- **`icons[].src`** — must be HTTPS/`data:`, same-origin, no credentials;
+  SVG treated as executable.
+- **`ui://` resources** (`_meta.ui.resourceUri`) — MCP Apps HTML rendered in the
+  host (see `attack-catalog.md` §23).
+- **Server-minted handles** — is authorization re-checked on every use, and is
+  the handle sufficiently random? (spec: a handle is a name, not a capability).
 
 ## 3. Taint: tool input → dangerous sinks
 
@@ -168,9 +180,35 @@ Read the exact config the requestor intends to ship. Red flags per client:
 ## 8. Tool-manifest hash (drift baseline)
 
 Serialize every tool/resource/prompt definition (name, description, schema,
-annotations) into a stable form and hash it. Record the hash in the verdict.
-It is how a future rug-pull (`attack-catalog.md` §4) gets detected: any change
-to the manifest after approval is an incident, not a routine update.
+annotations, `x-mcp-header`, `ttlMs`/`cacheScope`) into a stable form and hash
+it. Record the hash in the verdict. It is how a future rug-pull
+(`attack-catalog.md` §4) gets detected: any change to the manifest after
+approval is an incident, not a routine update.
+
+Note the limit: on 2026-07-28 a server can mutate its tool/resource set
+mid-session via `subscriptions/listen` (`toolsListChanged`,
+`resourcesListChanged`). A one-time hash is necessary but not sufficient —
+require continuous drift monitoring, not a static snapshot.
+
+## 9. Protocol-era checks (2026-07-28)
+
+Confirm the server implements the modern model and does so safely:
+
+- **`server/discover`** implements the required discovery method; `serverInfo`
+  and `instructions` are treated by the client as untrusted (self-reported).
+- **Statelessness:** no reliance on `Mcp-Session-Id`; every request carries
+  `_meta` `protocolVersion` + `clientCapabilities`.
+- **No stale session surface:** a modern server should ignore
+  `Mcp-Session-Id`/`Last-Event-ID` rather than honour them.
+- **`requestState`** (MRTR): integrity-protected and bound to the principal if
+  it influences authorization.
+- **`Origin` validation** present (403 on invalid); local bind is `127.0.0.1`.
+- **`Mcp-Method`/`Mcp-Name`/`MCP-Protocol-Version`** header/body validation
+  implemented (`-32020`).
+- **stdio:** server writes only valid MCP messages to stdout.
+
+If the artifact is a legacy (≤ 2025-11-25) server, keep the removed-surface
+checks from `playbook-endpoint.md` §10 in scope.
 
 ## Deliverable for white-box
 

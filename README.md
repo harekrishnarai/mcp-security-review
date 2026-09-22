@@ -29,9 +29,17 @@ on the worst finding you can demonstrate**.
 - Reviews a request from **two input modes**: the **source/package** (white-box)
   or a **live endpoint URL** (black-box).
 - Hunts MCP-specific attacks: tool-description injection, **annotation spoofing**
-  (`readOnlyHint` lies), rug-pull / manifest drift, tool shadowing, command
-  injection, indirect prompt injection, token passthrough, confused deputy, DCR
-  SSRF, DNS rebinding, session hijacking, sampling/elicitation abuse.
+  (`readOnlyHint` lies), rug-pull / manifest drift (including live
+  `subscriptions/listen` mutation), tool shadowing, command injection, indirect
+  prompt injection, token passthrough, confused deputy, DCR/CIMD SSRF, DNS
+  rebinding, **header–body desync / `x-mcp-header` injection**, **MRTR
+  `requestState` tampering**, session hijacking, elicitation URL phishing,
+  cache-scope leakage, pagination evasion, state-handle IDOR, `$ref` schema
+  SSRF, icon injection, and MCP Apps surface.
+- Anchored to the **current MCP spec revision (2026-07-28)** with explicit
+  legacy-era handling — recon runs in the right wire format (stateless
+  per-request `_meta`, `server/discover`) instead of the removed `initialize`
+  handshake.
 - Proves out-of-band **exfiltration** with a canary instead of guessing.
 - Analyzes **fleet-wide toxic flows** — the combined capability graph of
   everything already approved plus the new server.
@@ -58,6 +66,7 @@ redaction) — "the team promises to" is not a control.
 ```
 SKILL.md                              # entry point: stance, workflow, gates
 references/
+  spec-2026-07-28.md                  # protocol facts, eras, wire formats, security requirements
   playbook-code.md                    # white-box: artifact pinning, taint→sinks, supply chain, config
   playbook-endpoint.md                # black-box: live auth/session/injection/SSRF probing
   attack-catalog.md                   # MCP techniques + canary payloads + MCP01–MCP10 tags

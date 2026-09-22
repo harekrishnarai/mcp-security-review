@@ -188,9 +188,143 @@ Chains worth flagging: `reads_secrets + network_egress`,
 `reads_pii + sends_external`, `executes_code + network_egress`,
 `browses_web + reads_pii + sends_external`.
 
-## 14. Non-negotiables (restated)
+## 14. [MCP03] Header–body desync (`Mcp-Method` / `Mcp-Name` / `x-mcp-header`)
 
-Confirm these before approving; each maps to an auto-reject in `SKILL.md`:
-hardcoded secrets, RCE from tool input, unauth remote data access, plaintext
-HTTP, tampered/malicious artifact, live instruction injection, project-config
-auto-spawn of unsigned servers.
+**What:** Streamable HTTP mirrors request fields into headers that
+intermediaries trust for routing/rate-limiting/auth, while the server executes
+the body. Spec requires header==body (`-32020 HeaderMismatch`), but a target
+that validates lazily (or an intermediary that doesn't validate at all) lets the
+two disagree.
+
+**Hunt:** send `Mcp-Method`/`Mcp-Name`/`MCP-Protocol-Version` that contradict
+the body. Act on the header at one layer and the body at another, and you can
+bypass a WAF/rate-limit (header) or a proxy policy (body).
+
+**`x-mcp-header` specifically:** parameters annotated `x-mcp-header` become
+`Mcp-Param-{Name}` headers. Test:
+- CRLF / control characters in the parameter value (header injection).
+- Non-ASCII / whitespace → sentinel encoding `=?base64?…?=`; try to smuggle a
+  plain value that *looks* encoded, or an encoded value that decodes to a
+  different body value (mismatch bypass).
+- **Sensitive parameters placed in headers** are visible to every intermediary —
+  a spec warning servers are told to heed and often don't.
+
+## 15. [MCP06] MRTR `requestState` tampering
+
+**What:** New in 2026-07-28. The server returns `input_required` with an opaque
+`requestState` the client echoes on retry. The spec says servers **MUST** treat
+it as attacker-controlled and integrity-protect it if it affects authorization.
+
+**Hunt:** tamper, truncate, replay an old one, or swap it between users and see
+if the server accepts it. If a tool result/authorization depends on unverified
+`requestState`, that is a high-impact finding.
+
+## 16. [MCP03] Subscription-driven rug pull
+
+**What:** `subscriptions/listen` streams `toolsListChanged` /
+`resourcesListChanged` / `resources/updated` mid-session. The tool/resource set
+can change after the human approved a call.
+
+**Hunt:** open a listen stream; after approval, mutate a tool description or a
+resource body and confirm the client re-reads/picks it up without re-confirming.
+A manifest hash taken once at approval does not catch this — monitoring must be
+continuous.
+
+## 17. [MCP06] Elicitation URL phishing
+
+**What:** A server can return `elicitation/create` with `mode:"url"` (server asks
+the user to open a URL). Spec explicitly documents an account-takeover attack
+where the attacker tricks the user through a crafted URL.
+
+**Hunt:** verify the URL is not pre-authenticated, not a Punycode/lookalike host,
+and that the requester is bound to the same user who completes the flow. Servers
+**MUST NOT** use form mode to request secrets. A client that opens URLs via a
+shell, or accepts `javascript:`/`data:`/`file:`, is exploitable.
+
+## 18. [MCP10] Cache leakage (`ttlMs` / `cacheScope`)
+
+**What:** Results may be cached; `cacheScope: public` allows sharing across
+callers. Caches **MUST NOT** be shared across authorization contexts, but a
+misconfigured shared cache leaks one user's data to another.
+
+**Hunt:** authenticate as user A, call a cacheable tool, then as user B request
+the same and see if A's data is returned. Also check retries carrying
+`inputResponses`/`requestState` are not cached.
+
+## 19. [MCP03] Pagination evasion
+
+**What:** `tools/list` (and resources/prompts) paginate via `nextCursor`. An
+auditor who reads page 1 misses tools on later pages.
+
+**Hunt:** always follow `nextCursor` to exhaustion. Also test cursor
+manipulation (invalid/other-user cursors) for enumeration or skipping.
+
+## 20. [MCP07] State-handle hijacking / IDOR
+
+**What:** Sessionless cross-call state uses explicit handles. A handle is a
+*name, not a capability*: authenticated servers must verify authorization on
+every call; unauth servers' handles are bearer tokens.
+
+**Hunt:** guess/brute-force a handle, reuse another user's handle, or use an
+expired handle. A read tool that accepts any handle returns other users' state.
+
+## 21. [MCP05] Schema `$ref` SSRF / validator DoS
+
+**What:** JSON Schema 2020-12 permits `$ref` to an absolute URI. Spec says
+network `$ref`s **MUST NOT** be auto-dereferenced.
+
+**Hunt:** a tool whose `inputSchema`/`outputSchema` `$ref`s your canary or an
+internal address. A fetch = SSRF. Deeply nested `anyOf`/`allOf`/`$defs` =
+validator DoS.
+
+## 22. [MCP03] Icon injection
+
+**What:** `icons[].src` may be an HTTP(S) or `data:` URI the client fetches and
+renders. Spec forbids unsafe schemes and requires same-origin, no-credential
+fetches, and magic-byte validation.
+
+**Hunt:** point `src` at an OOB canary (tracking/SSRF), at an internal host, or
+supply an SVG containing script. A client with no egis renders attacker content.
+
+## 23. [MCP03] MCP Apps surface (extension)
+
+**What:** A `ui://` resource referenced by `_meta.ui.resourceUri` renders HTML
+in a host-controlled sandboxed iframe, proxying `tools/call` over `postMessage`.
+
+**Hunt:** inspect the HTML/JS for exfiltration, an over-broad `_meta.ui.csp`
+(allowing arbitrary origins), iframe-escape attempts, and whether the app can
+invoke tools beyond the user's consent. Treat "sandboxed" as a hypothesis to
+test, not a guarantee.
+
+## 24. [MCP07] Auth extras (2026-07-28)
+
+- **CIMD / DCR SSRF:** registration/trust-document fields fetched from your
+  canary/internal host.
+- **`iss` (RFC 9207) validation:** a client that doesn't validate `iss`, or that
+  normalizes it (case/port/trailing-slash/percent), is confused-deputy prone.
+- **Credential reuse across issuers:** credentials keyed by anything other than
+  `issuer` can be replayed to a different AS.
+- **Resource Indicators:** client must include `resource` in *both* authz and
+  token requests; a server that ignores `resource` can be sent tokens scoped for
+  another audience.
+
+## 25. [MCP04] Registry & local-install supply chain
+
+- **Registry is metadata only.** Namespace-auth proves who published, not that
+  the code is safe; scanning is delegated to npm/PyPI/Docker/aggregators. Treat
+  registry presence as provenance, never as a pass.
+- **One-click local install:** a client **MUST** show the exact untruncated
+  command and get consent before executing; a server that relies on the client
+  skipping that is a config auto-spawn/spoofing finding.
+- **stdio stdout injection:** the server **MUST NOT** write non-MCP data to
+  stdout; a server emitting extra lines can corrupt or inject into the protocol
+  stream.
+
+## 26. Non-negotiables (restated)
+
+Confirm before approving; each maps to an auto-reject in `SKILL.md`: hardcoded
+secrets; RCE from tool input; unauth remote data access; plaintext HTTP;
+tampered/malicious artifact; live instruction injection (proven); project-config
+auto-spawn of unsigned servers; and, new in this revision, **unverified
+`requestState` influencing authorization** and **sensitive values mirrored into
+`x-mcp-header`**.
