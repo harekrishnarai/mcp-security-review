@@ -96,6 +96,43 @@ Then ask your agent to review an MCP server or connector request. The skill
 triggers on MCP/connector approval, red-team review, tool poisoning, prompt
 injection, and similar contexts.
 
+### Install by prompt (no terminal needed)
+
+Paste this into Claude Code, OpenCode, Codex, Cursor, or any agent with shell
+access. It installs the skill globally and kicks off the workflow.
+
+```text
+Install the "mcp-security-review" agent skill from
+https://github.com/harekrishnarai/mcp-security-review so it is available now and
+in future sessions.
+
+Steps:
+1. Run: npx -y skills@latest add harekrishnarai/mcp-security-review -g --all -y
+   If npx is unavailable, clone the repo into your global skills directory:
+     Claude Code -> ~/.claude/skills/mcp-security-review
+     OpenCode    -> ~/.config/opencode/skills/mcp-security-review
+     Codex       -> ~/.codex/skills/mcp-security-review
+2. Verify SKILL.md exists and its frontmatter name is "mcp-security-review".
+3. Read the installed SKILL.md and confirm the skill is available.
+4. Report the install path and whether it succeeded.
+
+Then act as an offensive product-security reviewer for this skill. When I give
+you an MCP server or connector to review for org-wide approval — as a source
+repo/package OR a live endpoint URL — load the mcp-security-review skill and
+follow it end to end: pin the artifact and the MCP spec era (2026-07-28 vs
+legacy), run the white-box and/or black-box playbook, prove impact with an
+out-of-band canary, do the fleet toxic-flow analysis, and produce an
+approval-verdict.md plus one poc-record.md per confirmed finding. Do not approve
+on incomplete data.
+```
+
+Then give it a target:
+
+```text
+Using the mcp-security-review skill, review this MCP server for org-wide
+approval: <source repo or endpoint URL>
+```
+
 ## Usage
 
 Point it at a request. Example prompts:
